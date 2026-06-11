@@ -109,54 +109,60 @@ async def process_inbox(user_id: str = "system_trigger", session_id: str = "defa
             detail=str(e)
         )
 
-@app.get("/mock-db")
-def get_mock_db():
-    """
-    Retrieves the contents of the mock database files (mock_inbox.json, mock_sheets.json, mock_replies.json).
-    Useful for local testing and displaying state in the Streamlit UI.
-    """
-    workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    mock_inbox_path = os.path.join(workspace_root, "mock_inbox.json")
-    mock_sheets_path = os.path.join(workspace_root, "mock_sheets.json")
-    mock_replies_path = os.path.join(workspace_root, "mock_replies.json")
-
-    db_content = {
-        "inbox": [],
-        "sheets": [],
-        "replies": []
-    }
-
-    try:
-        if os.path.exists(mock_inbox_path):
-            with open(mock_inbox_path, "r", encoding="utf-8") as f:
-                db_content["inbox"] = json.load(f)
-        if os.path.exists(mock_sheets_path):
-            with open(mock_sheets_path, "r", encoding="utf-8") as f:
-                db_content["sheets"] = json.load(f)
-        if os.path.exists(mock_replies_path):
-            with open(mock_replies_path, "r", encoding="utf-8") as f:
-                db_content["replies"] = json.load(f)
-    except Exception as e:
-        import logging
-        logging.error(f"Failed to read mock database files: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to read mock database files. Please check backend logs for details."
-        )
-
-    return db_content
-
-class MockEmailRequest(BaseModel):
+class EmailRequest(BaseModel):
     from_email: str
     subject: str
     body: str
 
-@app.post("/mock-db/email")
-def add_mock_email(req: MockEmailRequest):
+@app.get("/db-state")
+def get_db_state():
     """
-    Adds a new mock email to the mock_inbox.json file.
+    Retrieves the contents of the Firestore collections (inbox, replies, tickets).
     """
-    # 1. Input Validation
+    try:
+        from agent.tools import get_firestore_client
+        db = get_firestore_client()
+        
+        inbox_docs = db.collection("inbox").stream()
+        tickets_docs = db.collection("tickets").stream()
+        replies_docs = db.collection("replies").stream()
+        
+        inbox = []
+        for doc in inbox_docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            inbox.append(data)
+            
+        tickets = []
+        for doc in tickets_docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            tickets.append(data)
+            
+        replies = []
+        for doc in replies_docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            replies.append(data)
+            
+        return {
+            "inbox": inbox,
+            "tickets": tickets,
+            "replies": replies
+        }
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to read Firestore database state: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read Firestore state: {str(e)}"
+        )
+
+@app.post("/emails")
+def add_email(req: EmailRequest):
+    """
+    Adds a new unread email to the Firestore inbox collection.
+    """
     if not req.from_email or not req.from_email.strip():
         raise HTTPException(status_code=400, detail="from_email is required and cannot be empty.")
     if not req.subject or not req.subject.strip():
@@ -167,29 +173,22 @@ def add_mock_email(req: MockEmailRequest):
     if not is_valid_email(req.from_email):
         raise HTTPException(status_code=400, detail="Invalid from_email format.")
 
-    workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    mock_inbox_path = os.path.join(workspace_root, "mock_inbox.json")
-    
     try:
-        inbox = []
-        if os.path.exists(mock_inbox_path):
-            with open(mock_inbox_path, "r", encoding="utf-8") as f:
-                inbox = json.load(f)
+        from agent.tools import get_firestore_client
+        db = get_firestore_client()
         
-        # 2. Generate a unique ID (e.g. msg_{timestamp})
         timestamp = int(time.time())
         unique_id = f"msg_{timestamp}"
         
-        # Suffix if there's a collision
-        existing_ids = {msg.get("id") for msg in inbox}
+        doc_ref = db.collection("inbox").document(unique_id)
         counter = 1
-        while unique_id in existing_ids:
+        while doc_ref.get().exists:
             unique_id = f"msg_{timestamp}_{counter}"
+            doc_ref = db.collection("inbox").document(unique_id)
             counter += 1
             
         snippet = req.body[:80] + "..." if len(req.body) > 80 else req.body
         new_email = {
-            "id": unique_id,
             "from_email": req.from_email.strip(),
             "subject": req.subject.strip(),
             "body": req.body,
@@ -198,43 +197,131 @@ def add_mock_email(req: MockEmailRequest):
             "received_at": datetime.datetime.now().isoformat()
         }
         
-        inbox.append(new_email)
-        with open(mock_inbox_path, "w", encoding="utf-8") as f:
-            json.dump(inbox, f, indent=2)
-            
-        return {"status": "success", "message": "Mock email added successfully.", "email": new_email}
+        doc_ref.set(new_email)
+        new_email["id"] = unique_id
+        
+        return {"status": "success", "message": "Email added successfully.", "email": new_email}
     except HTTPException as he:
         raise he
     except Exception as e:
         import logging
-        logging.error(f"Failed to add mock email: {e}", exc_info=True)
+        logging.error(f"Failed to add email: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to add mock email: {str(e)}"
+            detail=f"Failed to add email: {str(e)}"
         )
 
-@app.post("/mock-db/reset")
-def reset_mock_db():
+@app.post("/db/reset")
+def reset_db():
     """
-    Resets the mock database files to their default seeded state.
+    Purges Firestore collections (inbox, replies, tickets) and seeds the default 10 test emails to inbox.
     """
     try:
-        from agent.tools import ensure_mock_files_exist, MOCK_INBOX_PATH, MOCK_SHEETS_PATH, MOCK_REPLIES_PATH
-        # Remove the files to force re-seeding
-        for path in [MOCK_INBOX_PATH, MOCK_SHEETS_PATH, MOCK_REPLIES_PATH]:
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-        ensure_mock_files_exist()
-        return {"status": "success", "message": "Mock database successfully reset."}
+        from agent.tools import get_firestore_client
+        db = get_firestore_client()
+        
+        # Purge collections
+        for collection_name in ["inbox", "replies", "tickets"]:
+            docs = db.collection(collection_name).stream()
+            for doc in docs:
+                doc.reference.delete()
+                
+        # Seed 10 test emails
+        default_inbox = [
+            {
+                "id": "msg_001",
+                "from_email": "alice.smith@example.com",
+                "subject": "Urgent: Password Reset Request",
+                "body": "Hi Support, I'm locked out of my corporate login and cannot access my email or Okta. Can you please reset my password? Thanks, Alice.",
+                "snippet": "Hi Support, I'm locked out of my corporate login and cannot access my email...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_002",
+                "from_email": "bob.jones@example.com",
+                "subject": "Printer jam in lobby",
+                "body": "The main printer in the lobby is jammed and showing error code 43. We need to print handouts for the client meeting. Can someone help?",
+                "snippet": "The main printer in the lobby is jammed and showing error code 43...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_003",
+                "from_email": "charlie.brown@example.com",
+                "subject": "New Hire Laptop Provisioning - David Lee",
+                "body": "Hello IT, we have a new engineer, David Lee, starting next Monday. He needs a standard engineering laptop (MacBook Pro 16\"), external monitor, and access to GitHub, Slack, and AWS. Let me know if you need approval from the VP.",
+                "snippet": "Hello IT, we have a new engineer, David Lee, starting next Monday...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_004",
+                "from_email": "diana.prince@example.com",
+                "subject": "VPN Access Denied",
+                "body": "Dear Helpdesk, I am trying to connect to the corporate VPN from home, but it keeps giving me a credential error. I updated my password yesterday. Can you verify if my VPN account is active? Thanks.",
+                "snippet": "Dear Helpdesk, I am trying to connect to the corporate VPN from home...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_005",
+                "from_email": "evan.wright@example.com",
+                "subject": "Salesforce Account Request",
+                "body": "Hi, I need access to Salesforce Sales Cloud for the sales lead generation task. My manager is Sarah Jenkins, who approved this request. Please provision my account. Thanks!",
+                "snippet": "Hi, I need access to Salesforce Sales Cloud for the sales lead generation task...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_006",
+                "from_email": "fiona.gallagher@example.com",
+                "subject": "Monitor is flickering",
+                "body": "My secondary monitor has started flickering green every few seconds. I've tried unplugging the HDMI cable and plugging it back in, but the issue persists. Is it possible to get a replacement cable or a new monitor? Thanks.",
+                "snippet": "My secondary monitor has started flickering green every few seconds...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_007",
+                "from_email": "george.costanza@example.com",
+                "subject": "Wi-Fi is slow in conference room B",
+                "body": "Hi support, the corporate Wi-Fi is barely working in conference room B. We keep dropping off our video calls. Can someone look at the access point in that area?",
+                "snippet": "Hi support, the corporate Wi-Fi is barely working in conference room B...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_008",
+                "from_email": "harvey.dent@example.com",
+                "subject": "Urgent: Phishing email reported",
+                "body": "I received an email claiming to be from our CEO asking for my phone number to send gift cards. It looks suspicious. The sender address is ceo-office@gmail.com, not our domain. Please investigate.",
+                "snippet": "I received an email claiming to be from our CEO asking for my phone number...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_009",
+                "from_email": "irene.adler@example.com",
+                "subject": "Zoom login issue",
+                "body": "Hi team, I am unable to sign in to Zoom using SSO. It displays an error saying 'User not found in partner directory'. I can log into other Google Workspace apps fine. Please assist.",
+                "snippet": "Hi team, I am unable to sign in to Zoom using SSO. It displays an error...",
+                "is_unread": True
+            },
+            {
+                "id": "msg_010",
+                "from_email": "john.watson@example.com",
+                "subject": "Software installation: Slack",
+                "body": "Hello, I recently got my laptop replaced and need Slack installed. Can you install it for me or send the link to download the corporate version?",
+                "snippet": "Hello, I recently got my laptop replaced and need Slack installed...",
+                "is_unread": True
+            }
+        ]
+        
+        for msg in default_inbox:
+            doc_id = msg.pop("id")
+            msg["received_at"] = datetime.datetime.now().isoformat()
+            db.collection("inbox").document(doc_id).set(msg)
+            
+        return {"status": "success", "message": "Firestore database successfully reset and seeded."}
     except Exception as e:
         import logging
-        logging.error(f"Failed to reset mock database: {e}", exc_info=True)
+        logging.error(f"Failed to reset Firestore: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="Failed to reset mock database. Please check backend logs for details."
+            detail=f"Failed to reset Firestore: {str(e)}"
         )
 
 @app.post("/run-evals")
