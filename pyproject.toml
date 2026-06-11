@@ -1,0 +1,22 @@
+[project]
+name = "autonomous-it-support-inbox-guardian"
+version = "0.1.0"
+description = "Autonomous IT Support Inbox Guardian"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "google-genai",
+    "google-adk",
+    "phoenix",
+    "openinference-instrumentation-google-adk",
+    "streamlit",
+    "google-api-python-client",
+    "google-auth",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

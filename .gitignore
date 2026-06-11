@@ -1,0 +1,30 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Secret/environment files
+.env
+.env.local
+.env.*
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Simulation database files and run logs
+mock_inbox.json
+mock_sheets.json
+mock_replies.json
+data/
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE configs
+.vscode/
+.idea/

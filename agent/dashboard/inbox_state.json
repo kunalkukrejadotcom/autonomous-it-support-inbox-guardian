@@ -1,0 +1,116 @@
+{
+    "total_processed": 28,
+    "total_resolved": 19,
+    "total_escalated": 9,
+    "system_status": "Idle",
+    "logs": [
+        {
+            "ticket_id": "TCK-1020",
+            "timestamp": "2026-06-11 10:15:30",
+            "sender": "sarah.jones@company.com",
+            "subject": "VPN connection dropping constantly",
+            "category": "Network",
+            "action": "Escalated",
+            "confidence": 0.88,
+            "eval_score": 0.9,
+            "status": "Escalated",
+            "reasoning": "User reports intermittent network drops. Requires firewall configurations and infrastructure analysis. Automatic response is insufficient.",
+            "trace_id": "px-9b8e21a2c3",
+            "response": "Ticket escalated to DevOps Network team. Assigned agent: Alex Mercer. Internal escalation Slack notification sent."
+        },
+        {
+            "ticket_id": "TCK-1021",
+            "timestamp": "2026-06-11 11:02:15",
+            "sender": "mike.t@company.com",
+            "subject": "Need MS Office license key",
+            "category": "Licensing",
+            "action": "Auto-replied",
+            "confidence": 0.96,
+            "eval_score": 0.94,
+            "status": "Resolved",
+            "reasoning": "Standard request for licensing. Matched KB rule for software catalog. Automated guide provided.",
+            "trace_id": "px-1c7b89f5d2",
+            "response": "Hello Mike,\nThank you for reaching out. For MS Office license keys, please navigate to our corporate App Catalog at https://catalog.company.com, select Microsoft Office 365, and request approval. Once approved, the license is assigned automatically.\nBest,\nIT Support Guardian"
+        },
+        {
+            "ticket_id": "TCK-1022",
+            "timestamp": "2026-06-11 11:45:00",
+            "sender": "alice.w@company.com",
+            "subject": "Printer in HR room offline",
+            "category": "Hardware",
+            "action": "Auto-replied",
+            "confidence": 0.91,
+            "eval_score": 0.89,
+            "status": "Resolved",
+            "reasoning": "Identified office printer malfunction. Fetched printer network status. Suggested standard restart/spool purge steps.",
+            "trace_id": "px-4e92a838df",
+            "response": "Hi Alice,\nWe have checked printer PRT-HR-02 and it appears offline. Please verify that the ethernet connection at the back is plugged in, or cycle the power switch. If issues persist, please let us know so we can dispatch desktop support.\nBest,\nIT Support Guardian"
+        },
+        {
+            "ticket_id": "TCK-1023",
+            "timestamp": "2026-06-11 12:30:10",
+            "sender": "devops-alerts@company.com",
+            "subject": "CRITICAL: Redis server out of memory",
+            "category": "Infrastructure",
+            "action": "Escalated",
+            "confidence": 0.99,
+            "eval_score": 0.98,
+            "status": "Escalated",
+            "reasoning": "Critical server error. Triggers emergency on-call escalation rules. Bypassed auto-reply to avoid customer delay.",
+            "trace_id": "px-8f430b2e88",
+            "response": "Emergency system alert logged. Paged DevOps engineering lead via Opsgenie. Creating high-priority incident sheet record."
+        },
+        {
+            "ticket_id": "TCK-1024",
+            "timestamp": "2026-06-11 13:10:45",
+            "sender": "john.doe@company.com",
+            "subject": "Reset password for Gmail account",
+            "category": "Access",
+            "action": "Auto-replied",
+            "confidence": 0.98,
+            "eval_score": 0.96,
+            "status": "Resolved",
+            "reasoning": "SSO Password Reset Request. Standard verification workflow exists. Directed user to Identity portal.",
+            "trace_id": "px-2d939f1c73",
+            "response": "Hi John,\nYou can securely reset your corporate account passwords by visiting our SSO identity portal at https://identity.company.com/reset. Follow the MFA prompts on your phone to verify.\nBest,\nIT Support Guardian"
+        }
+    ],
+    "eval_history": {
+        "runs": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ],
+        "helpfulness": [
+            0.82,
+            0.85,
+            0.88,
+            0.91,
+            0.94
+        ],
+        "completeness": [
+            0.79,
+            0.81,
+            0.85,
+            0.88,
+            0.92
+        ],
+        "tone": [
+            0.88,
+            0.89,
+            0.9,
+            0.92,
+            0.95
+        ],
+        "accuracy": [
+            0.84,
+            0.86,
+            0.89,
+            0.93,
+            0.96
+        ]
+    },
+    "current_rules": "1. If email contains 'password reset', send SSO portal URL.\n2. If email mentions physical damage or spill, escalate to Hardware.\n3. If subject starts with 'CRITICAL', immediately escalate to DevOps On-Call.\n4. If email is about printer jam or offline status, send restart guidelines."
+}
