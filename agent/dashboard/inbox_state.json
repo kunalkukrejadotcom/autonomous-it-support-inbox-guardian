@@ -1,9 +1,51 @@
 {
-    "total_processed": 28,
-    "total_resolved": 19,
-    "total_escalated": 9,
+    "total_processed": 31,
+    "total_resolved": 20,
+    "total_escalated": 11,
     "system_status": "Idle",
     "logs": [
+        {
+            "ticket_id": "TCK-31",
+            "timestamp": "2026-06-11 15:48:10",
+            "sender": "security-alert@company.com",
+            "subject": "Suspicious login attempt blocked for user Jane",
+            "category": "Security",
+            "action": "Escalated",
+            "confidence": 0.99,
+            "eval_score": 0.98,
+            "status": "Escalated",
+            "reasoning": "Detected high priority login anomaly. Demands manual investigation and MFA credential verification. Auto-response bypass required to secure identity.",
+            "trace_id": "px-f5cf5ece6",
+            "response": "Escalated to Security Incident Response. Ticket TCK-1027 created. Account locks confirmed. Security team paged on Opsgenie."
+        },
+        {
+            "ticket_id": "TCK-30",
+            "timestamp": "2026-06-11 15:48:06",
+            "sender": "robert.s@company.com",
+            "subject": "How do I request a Zoom Pro license?",
+            "category": "Licensing",
+            "action": "Auto-replied",
+            "confidence": 0.94,
+            "eval_score": 0.95,
+            "status": "Resolved",
+            "reasoning": "Matched license provisioning workflow in KB. User has verified active AD group. Automated portal instructions issued.",
+            "trace_id": "px-e256a94f1",
+            "response": "Hi Robert,\nTo request a Zoom Pro license, please submit a request through our Software Portal at https://portal.company.com/request/zoom. Your manager will need to approve it, and then it will be automatically provisioned within 15 minutes.\nBest,\nIT Support Guardian"
+        },
+        {
+            "ticket_id": "TCK-29",
+            "timestamp": "2026-06-11 15:48:01",
+            "sender": "david.k@company.com",
+            "subject": "Laptop screen flickering after update",
+            "category": "Hardware",
+            "action": "Escalated",
+            "confidence": 0.87,
+            "eval_score": 0.9,
+            "status": "Escalated",
+            "reasoning": "Identified hardware artifacting. Local user is unable to complete work. Needs physical screen diagnosis or swap. Automated reply cannot fix hardware defects.",
+            "trace_id": "px-575a87cf0",
+            "response": "Ticket escalated to Desktop Hardware Team. Assigned to technician Lisa Wong. Notification sent. Pick-up locker code assigned."
+        },
         {
             "ticket_id": "TCK-1020",
             "timestamp": "2026-06-11 10:15:30",
@@ -81,35 +123,40 @@
             2,
             3,
             4,
-            5
+            5,
+            6
         ],
         "helpfulness": [
             0.82,
             0.85,
             0.88,
             0.91,
-            0.94
+            0.94,
+            0.95
         ],
         "completeness": [
             0.79,
             0.81,
             0.85,
             0.88,
-            0.92
+            0.92,
+            0.93
         ],
         "tone": [
             0.88,
             0.89,
             0.9,
             0.92,
-            0.95
+            0.95,
+            0.96
         ],
         "accuracy": [
             0.84,
             0.86,
             0.89,
             0.93,
-            0.96
+            0.96,
+            0.97
         ]
     },
     "current_rules": "1. If email contains 'password reset', send SSO portal URL.\n2. If email mentions physical damage or spill, escalate to Hardware.\n3. If subject starts with 'CRITICAL', immediately escalate to DevOps On-Call.\n4. If email is about printer jam or offline status, send restart guidelines."

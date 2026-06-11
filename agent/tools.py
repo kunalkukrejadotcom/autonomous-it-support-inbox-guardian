@@ -361,6 +361,63 @@ def send_reply(message_id: str, inbox_email: str, body: str) -> str:
             return f"Error sending reply: {str(e)}"
 
 @tool
+def archive_email(message_id: str, inbox_email: str) -> str:
+    """Mark an email as read/archived so it is not re-processed in future inbox scans.
+    
+    This MUST be called for every email that is escalated (Complex Path) since
+    `send_reply` is not invoked for those emails and they would otherwise remain
+    unread and be picked up again in subsequent processing cycles.
+    
+    Args:
+        message_id: The ID of the email to archive/mark as read.
+        inbox_email: The target inbox address (e.g. support@example.com).
+        
+    Returns:
+        Status message confirming the email has been archived.
+    """
+    if not is_valid_email(inbox_email):
+        return "Error: Invalid inbox_email format."
+    if not message_id or not isinstance(message_id, str) or not re.match(r"^[a-zA-Z0-9_@.-]+$", message_id.strip()):
+        return "Error: Invalid message_id format."
+
+    if SIMULATED_MODE:
+        ensure_mock_files_exist()
+        try:
+            with open(MOCK_INBOX_PATH, "r", encoding="utf-8") as f:
+                inbox = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            return f"Error reading mock inbox: {str(e)}"
+
+        found = False
+        for msg in inbox:
+            if msg.get("id") == message_id:
+                msg["is_unread"] = False
+                found = True
+                break
+
+        if not found:
+            return f"Error: Email with ID {message_id} not found in mock inbox."
+
+        try:
+            with open(MOCK_INBOX_PATH, "w", encoding="utf-8") as f:
+                json.dump(inbox, f, indent=2)
+        except IOError as e:
+            return f"Error saving mock inbox: {str(e)}"
+
+        return f"Email {message_id} successfully archived (marked as read)."
+    else:
+        try:
+            service = get_gmail_service(inbox_email)
+            service.users().messages().modify(
+                userId='me',
+                id=message_id,
+                body={'removeLabelIds': ['UNREAD']}
+            ).execute()
+            return f"Email {message_id} successfully archived (UNREAD label removed)."
+        except Exception as e:
+            return f"Error archiving email: {str(e)}"
+
+@tool
 def create_ticket_record(ticket_data: dict = None, **kwargs) -> str:
     """Create a ticket record in the tracking database (mock sheets or live Sheets).
     

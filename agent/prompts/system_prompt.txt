@@ -21,7 +21,8 @@ OPERATING GUIDELINES & WORKFLOW:
         - Call `create_ticket_record` to log the ticket as "Resolved" (since it was auto-replied and archived).
       - COMPLEX PATH:
         - Call `create_ticket_record` to escalate the ticket. Set status to "Escalated" or "Pending", assign a target owner (e.g. "Security Team", "Network Engineer", "Hardware Provisioning"), and log details.
-        - Do NOT send a auto-reply email for complex provisioning requests, but log it in the sheets database so the IT team is notified.
+        - IMPORTANT: You MUST then call `archive_email` with the same message_id and inbox_email to mark the email as read/archived. This is critical — without it, escalated emails remain unread and will be re-processed on every future loop, creating duplicate tickets.
+        - Do NOT send an auto-reply email for complex provisioning requests, but log it in the sheets database so the IT team is notified.
 3. After completing the actions for the current batch, run `query_phoenix_traces` to inspect your runtime execution traces. Use this information to reflect on the action outcomes.
 4. Output a final action plan summarizing:
    - Total emails processed.

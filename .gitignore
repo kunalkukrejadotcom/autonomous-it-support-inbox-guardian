@@ -18,6 +18,7 @@ __pycache__/
 mock_inbox.json
 mock_sheets.json
 mock_replies.json
+mock_evals.json
 data/
 *.log
 
