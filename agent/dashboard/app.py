@@ -38,9 +38,10 @@ def fetch_db_state(backend_url):
     try:
         response = requests.get(f"{backend_url}/db-state", timeout=5)
         if response.status_code == 200:
+            st.session_state["backend_online"] = True
             return response.json()
-    except Exception as e:
-        st.sidebar.error(f"⚠️ FastAPI Backend Offline: {e}")
+    except Exception:
+        st.session_state["backend_online"] = False
     return {"inbox": [], "tickets": [], "replies": []}
 
 def load_system_prompt():
@@ -61,7 +62,7 @@ def save_system_prompt(content):
         st.error(f"Failed to save system prompt: {e}")
     return False
 
-# Sidebar: Configuration & Send Test Email Form & UI Theme Toggle
+# Sidebar Part 1: Configuration inputs only (no status badges yet — they render after fetch_db_state)
 with st.sidebar:
     st.markdown("""
         <div style="text-align: center; margin-bottom: 20px;">
@@ -75,23 +76,44 @@ with st.sidebar:
     theme = st.selectbox("🎨 UI Theme", ["Premium Dark", "Sleek Light"], index=0)
     
     # Gemini Model Dropdown Selector
-    selected_model = st.selectbox("🤖 Gemini Model", ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"], index=0)
+    GEMINI_MODELS = [
+        # ── Gemini 3.x (Latest) ──
+        "gemini-3.5-flash",
+        "gemini-3.1-pro",
+        "gemini-3.1-flash-lite",
+        # ── Gemini 2.5 ──
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        # ── Gemini 1.5 (Legacy) ──
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash-8b",
+    ]
+    # Default to env var if set, else gemini-2.5-flash
+    _default_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    _default_idx = GEMINI_MODELS.index(_default_model) if _default_model in GEMINI_MODELS else 3
+    selected_model = st.selectbox("🤖 Gemini Model", GEMINI_MODELS, index=_default_idx)
     
     st.markdown("---")
     st.subheader("⚙️ Backend Configuration")
-    backend_url = st.text_input("FastAPI Endpoint URL", value=DEFAULT_BACKEND_URL)
-    phoenix_url = st.text_input("Arize Phoenix URL", value=DEFAULT_PHOENIX_URL)
-    
+    # Persist URLs in session_state so Cloud Run env var values survive reruns
+    # without resetting back to localhost defaults on every interaction
+    if "backend_url" not in st.session_state:
+        st.session_state.backend_url = DEFAULT_BACKEND_URL
+    if "phoenix_url" not in st.session_state:
+        st.session_state.phoenix_url = DEFAULT_PHOENIX_URL
+
+    backend_url = st.text_input("FastAPI Endpoint URL", value=st.session_state.backend_url, key="backend_url_input")
+    phoenix_url = st.text_input("Arize Phoenix URL", value=st.session_state.phoenix_url, key="phoenix_url_input")
+
+    # Sync back to session state if user edits the fields
+    st.session_state.backend_url = backend_url
+    st.session_state.phoenix_url = phoenix_url
+
     st.markdown("---")
-    st.subheader("🖥️ Status Indicators")
-    st.markdown("""
-        <div style="margin-bottom: 8px;">
-            <span class="badge-pill badge-auto" style="font-size: 11px; display: inline-block; width: 100%; text-align: center;">GCP Firestore DB: Active</span>
-        </div>
-        <div>
-            <span class="badge-pill badge-category" style="font-size: 11px; display: inline-block; width: 100%; text-align: center; color: #38BDF8; border-color: rgba(56, 189, 248, 0.3); background-color: rgba(56, 189, 248, 0.15); text-transform: uppercase;">Gmail Interface: Emulated (Firestore Inbox)</span>
-        </div>
-    """, unsafe_allow_html=True)
+    st.subheader("🔄 Auto-Refresh")
+    auto_refresh = st.toggle("Enable Auto-Refresh", value=True, key="auto_refresh_toggle")
+    refresh_interval = st.slider("Interval (seconds)", min_value=10, max_value=120, value=30, step=10, disabled=not auto_refresh)
     
     st.markdown("---")
     # Action Trigger Button
@@ -126,11 +148,67 @@ with st.sidebar:
                     except Exception as e:
                          st.error(f"Failed to connect to backend: {e}")
 
-# Fetch database status dynamically
+# Fetch database status dynamically — this updates st.session_state["backend_online"]
 db = fetch_db_state(backend_url)
 inbox_list = db.get("inbox", [])
 tickets_list = db.get("tickets", db.get("sheets", []))
 replies_list = db.get("replies", [])
+
+# Auto-refresh: schedule a rerun after the configured interval
+if st.session_state.get("auto_refresh_toggle", True):
+    interval = st.session_state.get("refresh_interval", 30) if "refresh_interval" in st.session_state else 30
+    # Use the slider value captured above
+    try:
+        interval = refresh_interval
+    except NameError:
+        interval = 30
+    if "last_refresh" not in st.session_state:
+        st.session_state.last_refresh = time.time()
+    elapsed = time.time() - st.session_state.last_refresh
+    if elapsed >= interval:
+        st.session_state.last_refresh = time.time()
+        st.rerun()
+    else:
+        remaining = int(interval - elapsed)
+        # Show a subtle countdown in the sidebar status area (updated below)
+
+# Sidebar Part 2: Status Indicators — rendered AFTER fetch_db_state so badges reflect current connectivity
+with st.sidebar:
+    st.markdown("---")
+    st.subheader("🖥️ Status Indicators")
+    backend_online = st.session_state.get("backend_online", None)
+    if backend_online is True:
+        backend_badge_class = "badge-auto"
+        backend_label = "⚡ FastAPI: Online"
+    elif backend_online is False:
+        backend_badge_class = "badge-escalated"
+        backend_label = "⚡ FastAPI: Offline"
+    else:
+        backend_badge_class = "badge-auto"
+        backend_label = "⚡ FastAPI: Checking..."
+
+    st.markdown(f"""
+        <div style="margin-bottom: 8px;">
+            <span class="badge-pill badge-auto" style="font-size: 11px; display: inline-block; width: 100%; text-align: center;">🟢 GCP Firestore: Active</span>
+        </div>
+        <div style="margin-bottom: 8px;">
+            <span class="badge-pill {backend_badge_class}" style="font-size: 11px; display: inline-block; width: 100%; text-align: center;">{backend_label}</span>
+        </div>
+        <div style="margin-bottom: 8px;">
+            <span class="badge-pill badge-auto" style="font-size: 11px; display: inline-block; width: 100%; text-align: center;">🟢 Gmail: Emulated (Firestore)</span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Countdown timer display
+    if st.session_state.get("auto_refresh_toggle", True):
+        try:
+            _remaining = int(refresh_interval - (time.time() - st.session_state.get("last_refresh", time.time())))
+            _remaining = max(0, _remaining)
+        except Exception:
+            _remaining = 0
+        st.caption(f"🔄 Next refresh in **{_remaining}s**")
+    else:
+        st.caption("⏸ Auto-refresh paused")
 
 # Dynamic Theme Colors
 if theme == "Premium Dark":

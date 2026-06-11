@@ -20,7 +20,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-from agent.instrumentation import instrument
+from agent.instrumentation import instrument, get_status as get_tracing_status
 from agent.root_agent import inbox_guardian, create_agent
 from agent.tools import is_valid_email
 from agent.evaluators import run_trace_evaluations, run_self_improvement
@@ -65,6 +65,70 @@ runner = Runner(
     session_service=session_service,
     auto_create_session=True
 )
+
+@app.get("/health/tracing")
+def health_tracing():
+    """
+    Diagnostic endpoint: returns current Phoenix tracing status.
+    Checks whether PHOENIX_COLLECTOR_ENDPOINT is set and the tracer provider initialized.
+    """
+    import requests as _requests
+    status = get_tracing_status()
+    endpoint = status["endpoint"]
+
+    # Derive the Phoenix base URL by stripping /v1/traces
+    phoenix_base = endpoint.replace("/v1/traces", "").rstrip("/") if endpoint != "NOT SET" else ""
+
+    # Connectivity check: GET the Phoenix root — much more reliable than POSTing OTLP
+    phoenix_reachable = False
+    phoenix_status_code = None
+    phoenix_error = None
+    if phoenix_base:
+        try:
+            resp = _requests.get(phoenix_base, timeout=5)
+            phoenix_status_code = resp.status_code
+            phoenix_reachable = resp.status_code < 500
+        except Exception as e:
+            phoenix_error = str(e)
+
+    return {
+        **status,
+        "phoenix_base_url": phoenix_base or "NOT SET",
+        "phoenix_ui_reachable": phoenix_reachable,
+        "phoenix_ui_status_code": phoenix_status_code,
+        "phoenix_ui_error": phoenix_error,
+    }
+
+@app.post("/test-tracing")
+def test_tracing():
+    """
+    Diagnostic endpoint: manually emits a test span via the configured tracer provider.
+    If tracing is not initialized, returns an error with the reason.
+    """
+    from agent.instrumentation import _tracer_provider
+    status = get_tracing_status()
+
+    if not _tracer_provider:
+        return {
+            "status": "tracing_not_initialized",
+            "reason": "_tracer_provider is None — check PHOENIX_COLLECTOR_ENDPOINT env var and Cloud Run logs",
+            "tracing_status": status,
+        }
+
+    try:
+        tracer = _tracer_provider.get_tracer("inbox-guardian-test")
+        with tracer.start_as_current_span("manual-test-span") as span:
+            span.set_attribute("test.source", "test-tracing-endpoint")
+            span.set_attribute("test.manual", True)
+        # Force flush so span is exported immediately
+        _tracer_provider.force_flush(timeout_millis=5000)
+        return {
+            "status": "span_emitted",
+            "message": "Test span 'manual-test-span' sent to Phoenix. Check your Phoenix dashboard.",
+            "endpoint": status["endpoint"],
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 @app.post("/process-inbox")
 async def process_inbox(user_id: str = "system_trigger", session_id: str = "default_session", model_name: str = None):

@@ -1,0 +1,30 @@
+# Use official Python runtime as a parent image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PORT=8080
+
+# Set working directory
+WORKDIR /app
+
+# Step 1: Install third-party dependencies first (cached layer — only re-runs if pyproject.toml changes)
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        fastapi uvicorn google-genai google-adk arize-phoenix \
+        openinference-instrumentation-google-adk streamlit pandas \
+        google-api-python-client google-auth python-dotenv \
+        google-cloud-firestore
+
+# Step 2: Copy agent source code (separate layer — re-runs on code changes only)
+COPY agent/ ./agent/
+
+# Step 3: Install the local package without re-downloading deps
+RUN pip install --no-cache-dir --no-deps .
+
+# Expose port (Cloud Run sets PORT env variable, defaulting to 8080)
+EXPOSE 8080
+
+# Command to run the application using uvicorn
+CMD ["sh", "-c", "uvicorn agent.main:app --host 0.0.0.0 --port ${PORT}"]

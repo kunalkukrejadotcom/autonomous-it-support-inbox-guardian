@@ -39,7 +39,12 @@ def fetch_traces(limit: int = 5):
     # 1. Try to fetch from live Phoenix client
     try:
         from phoenix.client import Client
-        client = Client()
+        # Derive base URL from env — strip trailing /v1/traces if present
+        _phoenix_endpoint = os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "")
+        _phoenix_base = os.getenv("PHOENIX_BASE_URL", "")
+        if not _phoenix_base and _phoenix_endpoint:
+            _phoenix_base = _phoenix_endpoint.replace("/v1/traces", "").rstrip("/")
+        client = Client(base_url=_phoenix_base) if _phoenix_base else Client()
         spans_df = client.get_spans()
         if not spans_df.empty:
             # Filter for send_reply spans which represent the response sent to the customer

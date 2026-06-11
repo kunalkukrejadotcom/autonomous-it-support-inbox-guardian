@@ -9,14 +9,18 @@ dependencies = [
     "uvicorn",
     "google-genai",
     "google-adk",
-    "phoenix",
+    "arize-phoenix",
     "openinference-instrumentation-google-adk",
     "streamlit",
+    "pandas",
     "google-api-python-client",
     "google-auth",
     "python-dotenv",
     "google-cloud-firestore",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent"]
 
 [build-system]
 requires = ["hatchling"]
