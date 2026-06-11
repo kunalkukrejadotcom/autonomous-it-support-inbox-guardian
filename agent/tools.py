@@ -24,8 +24,17 @@ def tool(func):
     return FunctionTool(func)
 
 def get_firestore_client() -> firestore.Client:
-    """Returns a GCP Firestore Client instance."""
-    return firestore.Client()
+    """Returns a GCP Firestore Client instance configured using environment variables."""
+    project = os.getenv("GCP_PROJECT_ID")
+    database = os.getenv("FIRESTORE_DATABASE_ID")
+    
+    kwargs = {}
+    if project:
+        kwargs["project"] = project
+    if database:
+        kwargs["database"] = database
+        
+    return firestore.Client(**kwargs)
 
 @tool
 def read_unread_emails(inbox_email: str, max_results: int = 20) -> str:
