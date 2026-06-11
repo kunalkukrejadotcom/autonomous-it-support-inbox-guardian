@@ -34,14 +34,14 @@ def load_evaluations():
             st.sidebar.error(f"⚠️ Failed to read mock_evals.json: {e}")
     return []
 
-def fetch_mock_db(backend_url):
+def fetch_db_state(backend_url):
     try:
-        response = requests.get(f"{backend_url}/mock-db", timeout=5)
+        response = requests.get(f"{backend_url}/db-state", timeout=5)
         if response.status_code == 200:
             return response.json()
     except Exception as e:
         st.sidebar.error(f"⚠️ FastAPI Backend Offline: {e}")
-    return {"inbox": [], "sheets": [], "replies": []}
+    return {"inbox": [], "tickets": [], "replies": []}
 
 def load_system_prompt():
     try:
@@ -83,6 +83,17 @@ with st.sidebar:
     phoenix_url = st.text_input("Arize Phoenix URL", value=DEFAULT_PHOENIX_URL)
     
     st.markdown("---")
+    st.subheader("🖥️ Status Indicators")
+    st.markdown("""
+        <div style="margin-bottom: 8px;">
+            <span class="badge-pill badge-auto" style="font-size: 11px; display: inline-block; width: 100%; text-align: center;">GCP Firestore DB: Active</span>
+        </div>
+        <div>
+            <span class="badge-pill badge-category" style="font-size: 11px; display: inline-block; width: 100%; text-align: center; color: #38BDF8; border-color: rgba(56, 189, 248, 0.3); background-color: rgba(56, 189, 248, 0.15); text-transform: uppercase;">Gmail Interface: Emulated (Firestore Inbox)</span>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
     # Action Trigger Button
     st.subheader("🚀 Manual Action Run")
     run_btn = st.button("Trigger Inbox Triage Now", use_container_width=True, type="primary")
@@ -94,7 +105,7 @@ with st.sidebar:
             from_email = st.text_input("From Email", placeholder="user@company.com")
             subject = st.text_input("Subject", placeholder="Need help with...")
             body = st.text_area("Body", placeholder="Explain the issue...")
-            submit_email = st.form_submit_button("Send Mock Email", use_container_width=True)
+            submit_email = st.form_submit_button("Send Test Email", use_container_width=True)
             if submit_email:
                 if not from_email or not subject or not body:
                     st.error("All fields are required.")
@@ -102,13 +113,13 @@ with st.sidebar:
                     st.error("Invalid email address.")
                 else:
                     try:
-                        res = requests.post(f"{backend_url}/mock-db/email", json={
+                        res = requests.post(f"{backend_url}/emails", json={
                             "from_email": from_email,
                             "subject": subject,
                             "body": body
                         })
                         if res.status_code == 200:
-                            st.success("Mock email sent successfully!")
+                            st.success("Test email sent successfully!")
                             st.rerun()
                         else:
                             st.error(f"Error sending email: {res.text}")
@@ -116,9 +127,9 @@ with st.sidebar:
                          st.error(f"Failed to connect to backend: {e}")
 
 # Fetch database status dynamically
-db = fetch_mock_db(backend_url)
+db = fetch_db_state(backend_url)
 inbox_list = db.get("inbox", [])
-sheets_list = db.get("sheets", [])
+tickets_list = db.get("tickets", db.get("sheets", []))
 replies_list = db.get("replies", [])
 
 # Dynamic Theme Colors
@@ -367,16 +378,26 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.markdown(f"""
-    <div class="status-container">
-        <span class="status-dot {dot_class}"></span>
-        <span style="font-weight: 600; font-size: 14px; color: {text_color}">SYSTEM STATUS: {status_label.upper()}</span>
+    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+        <div class="status-container" style="margin-bottom: 0;">
+            <span class="status-dot {dot_class}"></span>
+            <span style="font-weight: 600; font-size: 14px; color: {text_color}">SYSTEM STATUS: {status_label.upper()}</span>
+        </div>
+        <div class="status-container" style="margin-bottom: 0; border-color: rgba(16, 185, 129, 0.3);">
+            <span class="status-dot" style="background-color: #10B981;"></span>
+            <span style="font-weight: 600; font-size: 14px; color: {text_color}">GCP FIRESTORE DB: ACTIVE</span>
+        </div>
+        <div class="status-container" style="margin-bottom: 0; border-color: rgba(59, 130, 246, 0.3);">
+            <span class="status-dot" style="background-color: #3B82F6;"></span>
+            <span style="font-weight: 600; font-size: 14px; color: {text_color}">GMAIL INTERFACE: EMULATED (FIRESTORE INBOX)</span>
+        </div>
     </div>
 """, unsafe_allow_html=True)
 
 # Metrics calculation based on actual DB
 total_emails = len(inbox_list)
-auto_resolved = sum(1 for t in sheets_list if t.get("action_taken") == "Auto-Replied" or t.get("status") == "Resolved")
-escalated = sum(1 for t in sheets_list if t.get("action_taken") == "Escalated" or t.get("status") in ["Escalated", "Pending"])
+auto_resolved = sum(1 for t in tickets_list if t.get("action_taken") == "Auto-Replied" or t.get("status") == "Resolved")
+escalated = sum(1 for t in tickets_list if t.get("action_taken") == "Escalated" or t.get("status") in ["Escalated", "Pending"])
 
 # Row 1: Metrics display cards
 st.markdown(f"""
@@ -410,7 +431,7 @@ tab_log, tab_inbox, tab_phoenix, tab_self_eval = st.tabs([
 # ---- TAB 1: Live Triage Console & Action Log ----
 with tab_log:
     st.header("Activity Log")
-    st.markdown("<p style='color: #64748B; font-size: 14px;'>Displays all ticket logs stored in Google Sheets (mock_sheets.json).</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #64748B; font-size: 14px;'>Displays all ticket logs stored in GCP Firestore DB.</p>", unsafe_allow_html=True)
     
     # Search and Filter tools
     col_search, col_filter = st.columns([2, 1])
@@ -420,7 +441,7 @@ with tab_log:
         action_filter = st.selectbox("Filter by Action", ["All", "Auto-Replied", "Escalated"], key="log_filter")
         
     # Build list of logs
-    filtered_logs = sheets_list
+    filtered_logs = tickets_list
     if search_query:
         filtered_logs = [l for l in filtered_logs if search_query.lower() in l.get("subject", "").lower() or search_query.lower() in l.get("sender", "").lower()]
     if action_filter != "All":
@@ -482,15 +503,15 @@ with tab_log:
 
 # ---- TAB 2: Mock Inbox Viewer ----
 with tab_inbox:
-    st.header("📬 Mock Mailbox Inbox")
-    st.markdown("<p style='color: #64748B; font-size: 14px;'>Displays all messages currently in the mock mailbox. Unread messages will be processed during the next triage cycle.</p>", unsafe_allow_html=True)
+    st.header("📬 Firestore Mailbox Inbox")
+    st.markdown("<p style='color: #64748B; font-size: 14px;'>Displays all messages currently in the Firestore inbox. Unread messages will be processed during the next triage cycle.</p>", unsafe_allow_html=True)
     
-    # Button to reset mock DB
-    if st.button("🔄 Reset Mailbox / Database to Default", use_container_width=True, key="reset_db_btn"):
+    # Button to reset live Firestore DB
+    if st.button("🔄 Reset Live Firestore Database to Default", use_container_width=True, key="reset_db_btn"):
         try:
-            res = requests.post(f"{backend_url}/mock-db/reset")
+            res = requests.post(f"{backend_url}/db/reset")
             if res.status_code == 200:
-                st.success("Mock database reset successfully!")
+                st.success("Firestore database reset successfully!")
                 st.rerun()
             else:
                 st.error(f"Failed to reset database: {res.text}")
